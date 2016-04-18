@@ -15,6 +15,12 @@
     - { name: tomcat-juli-adapters.jar , dir: lib }
     - { name: tomcat-juli.jar          , dir: bin }
 
+- name: Download postgres94 jdbc driver
+  get_url: url=https://jdbc.postgresql.org/download/postgresql-9.4.1208.jar
+           dest=/opt/apache-tomcat-{{tomcat_version}}/{{item.dir}}/ 
+  with_items:
+    - { name: postgresql-9.4.1208.jar  , dir: lib }
+
 - name: Remove docs apps
   file: path=/opt/apache-tomcat-{{tomcat_version}}/webapps/docs state=absent
 
@@ -63,23 +69,42 @@
 - name: Recreate home directory symlink
   file: src=/opt/apache-tomcat-{{tomcat_version}} owner=tomcat group=tomcat path=/opt/tomcat state=link
 
-- name: Add tomcat systemd unit file
-  copy: src=systemd/tomcat.service dest=/usr/lib/systemd/system/tomcat.service owner=root group=root
+# Rhel 7
+#- name: Add tomcat systemd unit file
+#  copy: src=systemd/tomcat.service dest=/usr/lib/systemd/system/tomcat.service owner=root group=root
+  
+- name: Add tomcat init.d chkconfig file
+  copy: src=systemd/tomcat dest=/etc/init.d/tomcat owner=root group=root
+
+#- name: systemd daemon-reload
+#  shell: systemctl daemon-reload
 
 - name: systemd daemon-reload
-  shell: systemctl daemon-reload
+  shell: chkconfig --add tomcat
 
 - name: Start tomcat
   service: name=tomcat state=restarted enabled=yes
-
-- name: Add firewalld service file
-  template: src=firewalld/tomcat.xml dest=/usr/lib/firewalld/services/tomcat.xml owner=root group=root
-
-- name: Restart firewalld
-  service: name=firewalld state=restarted enabled=yes
+# Rhel 7
+#- name: Add firewalld service file
+#  template: src=firewalld/tomcat.xml dest=/usr/lib/firewalld/services/tomcat.xml owner=root group=root
 
 - name: Expose tomcat
-  shell: firewall-cmd --add-service=tomcat --zone=public --permanent
+  shell: iptables -A INPUT -m state --state NEW -m tcp -p tcp --dport 8080 -j ACCEPT -m comment --comment "Tomcat Server port"
+
+- name: Save iptables
+  shell: service iptables save
+  
+# Rhel 7
+#- name: Restart firewalld
+#  service: name=firewalld state=restarted enabled=yes
+
+
+- name: Stop iptables
+  service: name=iptables state=stop enabled=no
+# Rhel 7
+#- name: Expose tomcat
+#  shell: firewall-cmd --add-service=tomcat --zone=public --permanent
+
 
 - name: Wait for tomcat started
   wait_for: port={{http_port}}
